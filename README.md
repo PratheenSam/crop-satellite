@@ -38,3 +38,4 @@ This backend is designed to be **robust but light**. It uses a "Thread Pool" for
 
 ---
 *Powering the future of agriculture, one pixel at a time.*
+# crop-satellite
