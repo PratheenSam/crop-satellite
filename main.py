@@ -40,7 +40,7 @@ from models import (
 from sentinel_client import fetch_latest_image
 
 from db import Base, engine, get_db
-from models_db import Farmer as DBFarmer, Farm as DBFarm
+from models_db import Farmer as DBFarmer, Farm as DBFarm, AnalysisRecord as DBAnalysisRecord
 from sqlalchemy.orm import Session
 from fastapi import Depends
 
@@ -201,6 +201,7 @@ async def analyze_farm(payload: FarmRequest, db: Session = Depends(get_db)):
         try:
             target_farm = db.query(DBFarm).filter(DBFarm.id == payload.farm_id).first()
             if target_farm:
+                # Update current status on farm for quick access
                 target_farm.last_analysis = {
                     "date": response.image_date,
                     "status": "stress" if response.total_stress_zones > 0 else "healthy",
@@ -210,10 +211,37 @@ async def analyze_farm(payload: FarmRequest, db: Session = Depends(get_db)):
                     "primary_cause": response.stress_points[0].possible_causes[0] if response.stress_points else None,
                     "stress_points": [p.model_dump() for p in response.stress_points]
                 }
+                
+                # Save historical record only if values have changed
+                last_record = db.query(DBAnalysisRecord).filter(
+                    DBAnalysisRecord.farm_id == payload.farm_id
+                ).order_by(DBAnalysisRecord.created_at.desc()).first()
+
+                new_healthy = round(response.field_summary.healthy_area_pct, 2)
+                new_stressed = round(response.field_summary.stressed_area_pct, 2)
+                last_healthy = round(last_record.healthy_pct or 0, 2) if last_record else None
+                last_stressed = round(last_record.stressed_pct or 0, 2) if last_record else None
+
+                values_changed = (last_record is None) or (new_healthy != last_healthy) or (new_stressed != last_stressed)
+
+                if values_changed:
+                    history_entry = DBAnalysisRecord(
+                        farm_id=payload.farm_id,
+                        analysis_date=response.image_date,
+                        status="stress" if response.total_stress_zones > 0 else "healthy",
+                        healthy_pct=new_healthy,
+                        stressed_pct=new_stressed,
+                        stress_points=[p.model_dump() for p in response.stress_points]
+                    )
+                    db.add(history_entry)
+                    logger.info("New data detected — saving history record for farm %d", payload.farm_id)
+                else:
+                    logger.info("No data change — skipping duplicate history record for farm %d", payload.farm_id)
+
                 db.commit()
-                logger.info("Persisted analysis for farm %d", payload.farm_id)
+                logger.info("Persisted current analysis for farm %d", payload.farm_id)
         except Exception as e:
-            logger.error("Failed to persist analysis: %s", str(e))
+            logger.error("Failed to persist analysis results: %s", str(e))
 
     return response
 
@@ -300,6 +328,11 @@ async def delete_farm(farm_id: int, db: Session = Depends(get_db)):
     db.commit()
     logger.info("Farm %d deleted successfully", farm_id)
     return {"detail": "Farm deleted"}
+
+@app.get("/farms/{farm_id}/history", tags=["persistence"])
+async def list_farm_history(farm_id: int, db: Session = Depends(get_db)):
+    """Retrieve all historical analysis records for a specific farm, sorted by date."""
+    return db.query(DBAnalysisRecord).filter(DBAnalysisRecord.farm_id == farm_id).order_by(DBAnalysisRecord.created_at.desc()).all()
 
 @app.patch("/farms/{farm_id}", tags=["persistence"])
 async def update_farm(farm_id: int, data: dict, db: Session = Depends(get_db)):

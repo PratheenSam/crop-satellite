@@ -32,3 +32,18 @@ class Farm(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("Farmer", back_populates="farms")
+    analysis_history = relationship("AnalysisRecord", back_populates="farm", cascade="all, delete-orphan")
+
+class AnalysisRecord(Base):
+    __tablename__ = "analysis_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farm_id = Column(Integer, ForeignKey("farms.id"))
+    analysis_date = Column(String)  # Date of the satellite image
+    status = Column(String)         # 'healthy' or 'stress'
+    healthy_pct = Column(Float)
+    stressed_pct = Column(Float)
+    stress_points = Column(JSON)    # Full list of stress points for this date
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    farm = relationship("Farm", back_populates="analysis_history")
