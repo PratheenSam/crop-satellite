@@ -82,8 +82,12 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# Health check
+# Health check & Root
 # ---------------------------------------------------------------------------
+
+@app.get("/", tags=["meta"])
+async def root() -> dict:
+    return {"message": "Crop Satellite API is running. Use /health for status or /docs for API documentation."}
 
 @app.get("/health", tags=["meta"])
 async def health() -> dict:
