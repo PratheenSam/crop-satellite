@@ -29,6 +29,7 @@ class Farm(Base):
     coordinates = Column(JSON)
     area_hectares = Column(Float)
     last_analysis = Column(JSON, nullable=True)  # New: Persist analysis results
+    is_active = Column(Integer, default=1)       # New: Soft delete support (1=active, 0=deleted)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("Farmer", back_populates="farms")

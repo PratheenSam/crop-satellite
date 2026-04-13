@@ -94,6 +94,8 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+from analysis_engine import perform_farm_analysis
+
 # ---------------------------------------------------------------------------
 # Primary analysis endpoint
 # ---------------------------------------------------------------------------
@@ -104,150 +106,25 @@ async def analyze_farm(payload: FarmRequest, db: Session = Depends(get_db)):
     Fetch the most recent cloud-free satellite image for a farm's bounding box,
     calculate spectral indices (NDVI, NDWI, etc.), and detect stressed zones.
     """
-    coords = payload.coordinates
-    lats = [c[0] for c in coords]
-    lons = [c[1] for c in coords]
-    bbox = BBox(
-        min_x=min(lons),
-        min_y=min(lats),
-        max_x=max(lons),
-        max_y=max(lats),
-    )
+    if not payload.farm_id:
+        raise HTTPException(status_code=400, detail="farm_id is required for persistence and context")
 
-    logger.info(
-        "Received analysis request | farm_id=%s | bbox=%s | max_cloud=%.0f%%",
-        payload.farm_id,
-        bbox,
-        payload.max_cloud_cover,
-    )
-
-    # ---- Fetch satellite image (blocking IO → thread pool) ---------------
     try:
-        image, meta = await run_in_threadpool(
-            fetch_latest_image,
-            bbox,
-            payload.max_cloud_cover,
-            payload.lookback_days,
-            payload.max_farm_cloud_cover,
+        response = await perform_farm_analysis(
+            db=db,
+            farm_id=payload.farm_id,
+            max_cloud_cover=payload.max_cloud_cover,
+            lookback_days=payload.lookback_days,
+            max_farm_cloud_cover=payload.max_farm_cloud_cover
         )
-    except EnvironmentError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        return response
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except EnvironmentError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
-        logger.exception("Sentinel Hub fetch failed")
-        raise HTTPException(status_code=500, detail="Internal satellite data error")
-
-    # ---- Perform spectral analysis & stress detection (CPU intensive) ----
-    try:
-        result: AnalysisResult = await run_in_threadpool(analyze, image, bbox, coords)
-    except Exception as exc:
-        logger.exception("Image analysis failed")
-        raise HTTPException(status_code=500, detail=f"Analysis error: {exc}")
-
-    logger.info(
-        "Analysis complete | stress_zones=%d | cloud_over_farm=%.1f%%",
-        len(result.stress_zones),
-        result.cloud_cover_pct,
-    )
-
-    # ---- Build response --------------------------------------------------
-    _severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-    sorted_zones: list[StressZone] = sorted(
-        result.stress_zones,
-        key=lambda z: (_severity_order.get(z.severity, 9), -z.area_hectares),
-    )
-
-    stress_points = [
-        StressPoint(
-            coordinates=[z.lat, z.lon],
-            severity=z.severity,
-            area_hectares=z.area_hectares,
-            pixel_count=z.pixel_count,
-            possible_causes=z.possible_causes,
-            metrics=StressMetrics(**z.metrics),
-        )
-        for z in sorted_zones
-    ]
-
-    fs = result.field_summary
-    field_summary = FieldSummary(
-        mean_ndvi=fs["mean_ndvi"],
-        mean_ndwi=fs["mean_ndwi"],
-        mean_ndre=fs["mean_ndre"],
-        mean_evi=fs["mean_evi"],
-        mean_ndmi=fs["mean_ndmi"],
-        healthy_area_pct=fs["healthy_area_pct"],
-        moderate_area_pct=fs["moderate_area_pct"],
-        stressed_area_pct=fs["stressed_area_pct"],
-        cloud_cover_pct=fs["cloud_cover_pct"],
-        adaptive_stress_threshold=fs["adaptive_stress_threshold"],
-    )
-
-    response = AnalysisResponse(
-        image_date=meta["acquisition_date"],
-        bbox={
-            "min_lon": bbox.min_x,
-            "min_lat": bbox.min_y,
-            "max_lon": bbox.max_x,
-            "max_lat": bbox.max_y,
-        },
-        image_cloud_cover_pct=meta["cloud_cover_pct"],
-        farm_cloud_cover_pct=meta["farm_cloud_cover_pct"],
-        total_stress_zones=len(stress_points),
-        stress_points=stress_points,
-        field_summary=field_summary,
-        warnings=result.warnings,
-    )
-
-    # ---- Persist result to DB if farm_id provided ----
-    if payload.farm_id:
-        try:
-            target_farm = db.query(DBFarm).filter(DBFarm.id == payload.farm_id).first()
-            if target_farm:
-                # Update current status on farm for quick access
-                target_farm.last_analysis = {
-                    "date": response.image_date,
-                    "status": "stress" if response.total_stress_zones > 0 else "healthy",
-                    "alerts": response.total_stress_zones,
-                    "healthy_pct": response.field_summary.healthy_area_pct,
-                    "stressed_pct": response.field_summary.stressed_area_pct,
-                    "primary_cause": response.stress_points[0].possible_causes[0] if response.stress_points else None,
-                    "stress_points": [p.model_dump() for p in response.stress_points]
-                }
-                
-                # Save historical record only if values have changed
-                last_record = db.query(DBAnalysisRecord).filter(
-                    DBAnalysisRecord.farm_id == payload.farm_id
-                ).order_by(DBAnalysisRecord.created_at.desc()).first()
-
-                new_healthy = round(response.field_summary.healthy_area_pct, 2)
-                new_stressed = round(response.field_summary.stressed_area_pct, 2)
-                last_healthy = round(last_record.healthy_pct or 0, 2) if last_record else None
-                last_stressed = round(last_record.stressed_pct or 0, 2) if last_record else None
-
-                values_changed = (last_record is None) or (new_healthy != last_healthy) or (new_stressed != last_stressed)
-
-                if values_changed:
-                    history_entry = DBAnalysisRecord(
-                        farm_id=payload.farm_id,
-                        analysis_date=response.image_date,
-                        status="stress" if response.total_stress_zones > 0 else "healthy",
-                        healthy_pct=new_healthy,
-                        stressed_pct=new_stressed,
-                        stress_points=[p.model_dump() for p in response.stress_points]
-                    )
-                    db.add(history_entry)
-                    logger.info("New data detected — saving history record for farm %d", payload.farm_id)
-                else:
-                    logger.info("No data change — skipping duplicate history record for farm %d", payload.farm_id)
-
-                db.commit()
-                logger.info("Persisted current analysis for farm %d", payload.farm_id)
-        except Exception as e:
-            logger.error("Failed to persist analysis results: %s", str(e))
-
-    return response
+        logger.exception("Analysis failed")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -319,18 +196,20 @@ async def create_farm(farm: FarmCreate, db: Session = Depends(get_db)):
 
 @app.get("/farmers/{farmer_id}/farms", tags=["persistence"])
 async def list_farms(farmer_id: int, db: Session = Depends(get_db)):
-    return db.query(DBFarm).filter(DBFarm.farmer_id == farmer_id).all()
+    return db.query(DBFarm).filter(DBFarm.farmer_id == farmer_id, DBFarm.is_active == 1).all()
 
 @app.delete("/farms/{farm_id}", tags=["persistence"])
 async def delete_farm(farm_id: int, db: Session = Depends(get_db)):
-    logger.info("Delete request for farm %d", farm_id)
+    logger.info("Soft-delete request for farm %d", farm_id)
     farm = db.query(DBFarm).filter(DBFarm.id == farm_id).first()
     if not farm:
         logger.warning("Farm %d not found for deletion", farm_id)
         raise HTTPException(status_code=404, detail="Farm not found")
-    db.delete(farm)
+    
+    # Soft delete: mark as inactive instead of deleting from DB
+    farm.is_active = 0
     db.commit()
-    logger.info("Farm %d deleted successfully", farm_id)
+    logger.info("Farm %d marked as inactive (soft deleted)", farm_id)
     return {"detail": "Farm deleted"}
 
 @app.get("/farms/{farm_id}/history", tags=["persistence"])

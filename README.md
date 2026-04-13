@@ -27,11 +27,42 @@ Welcome to the brain of the Karsha platform! This backend handles the heavy lift
    ```
    *Note: Use the URL provided (e.g., tangy-colts-send.loca.lt) in your mobile app's configuration.*
 
-## 📂 Key Files
-- `main.py`: The entry point for all API calls (`/analyze`, `/farmers`, `/farms`).
-- `image_analyzer.py`: The "Math Lab" where we calculate plant health from satellite pixels.
-- `sentinel_client.py`: The bridge to get images from outer space.
-- `models_db.py`: Defines how farmers and fields are saved in our database.
+## � Background Automation: 6-Hour Scheduler
+The backend includes a dedicated background worker (`scheduler.py`) that ensures all fields are kept up-to-date without manual interaction.
+
+### When does it update?
+The scheduler runs on a **fixed 6-hour interval**. If you start the scheduler at **12:00 AM**, it will automatically trigger scans at:
+*   **06:00 AM**
+*   **12:00 PM (Noon)**
+*   **06:00 PM**
+*   **12:00 AM (Midnight)**
+
+### How it works:
+1.  **Immediate Scan**: Upon starting `scheduler.py`, it performs an immediate scan of all fields.
+2.  **Safety Filter**: It only scans fields where **`is_active = 1`** (active fields).
+3.  **Neon Sync**: All results are saved directly to your **Neon PostgreSQL** database.
+
+## �📂 Backend File Breakdown
+
+### 🛠️ Core Services
+- **`main.py`**: The API entry point. Handles all mobile app requests (Login, Register, List Farms). It now uses the centralized analysis engine and supports **Soft Deletes**.
+- **`scheduler.py`**: The background worker. It runs every 6 hours to automatically scan all active fields without farmer intervention.
+- **`analysis_engine.py`**: The shared engine that contains the logic for fetching satellite data, running stress analysis, and saving results to the database.
+
+### 🛰️ Satellite & Analysis
+- **`sentinel_client.py`**: Communicates with the Sentinel Hub API to fetch raw satellite bands (Red, Blue, Green, NIR, etc.).
+- **`image_analyzer.py`**: The "Math Lab." Calculates NDVI, NDWI, and other indices to detect crop stress and identify potential causes (Pests, Water, etc.).
+- **`bbox.py`**: Utility to handle "Bounding Boxes" for correctly framing satellite images based on farm coordinates.
+
+### 🗄️ Database & Models
+- **`db.py`**: Configures the connection to your **Neon PostgreSQL** database.
+- **`models_db.py`**: Defines the database schema (Farmers, Farms, Analysis History). Now includes the `is_active` field.
+- **`models.py`**: Contains Pydantic models used to validate data sent to and from the mobile app.
+- **`migrate_db.py`**: A utility script to initialize or update database tables.
+
+### ⚙️ Configuration
+- **`.env`**: Stores sensitive API credentials and your Neon Database URL.
+- **`requirements.txt`**: Lists all Python libraries needed (FastAPI, SQLAlchemy, APScheduler, etc.).
 
 ## 📝 A Quick Note for the Human
 This backend is designed to be **robust but light**. It uses a "Thread Pool" for satellite requests so it doesn't freeze up when multiple farmers are checking their fields at once. Keep your terminal open while the farmers are using the app!
