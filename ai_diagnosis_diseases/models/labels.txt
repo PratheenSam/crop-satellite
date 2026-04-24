@@ -1,0 +1,115 @@
+Apple Scab
+Apple Black Rot
+Apple Cedar rust
+Apple Healthy
+Banana Cordana
+Banana Healthy
+Banana Pestalotiopsis
+Banana Sigatoka
+Blight
+Blueberry Healthy
+Cherry Powdery Mildew
+Cherry Healthy
+Chilli Whitefly
+Chilli Yellowish
+Chilli Anthracnose
+Chilli Damping Off
+Chilli Leaf Curl Virus
+Chilli Leaf Spot
+Chilli Veinal Mottle Virus
+Chilli Healthy
+Coconut Bud Root Dropping
+Coconut Bud Rot
+Coconut Gray Leaf Spot
+Coconut Leaf Rot
+Coconut Stem Bleeding
+Common Rust
+Corn Cercospora Leaf Spot
+Corn Common Rust
+Corn Northern Leaf Blight
+Corn Healthy
+Grape Black Rot
+Grape Esca (Black Measles)
+Grape Leaf blight
+Grape Healthy
+Gray Leaf Spot
+Healthy
+Orange Haunglongbing
+Potato Early Blight
+Potato Healthy
+Potato Late Blight
+Peach Bacterial Spot
+Peach Healthy
+Pepper Bell Bacterial Spot
+Pepper Bell Healthy
+Potato Early Blight
+Potato Late Blight
+Potato Healthy
+Raspberry Healthy
+Soybean Healthy
+Squash Powdery Mildew
+Strawberry Leaf Scorch
+Strawberry Healthy
+Tomato Bacterial Spot
+Tomato Early Blight
+Tomato Late Blight
+Tomato Leaf Mold
+Tomato Septoria Leaf Spot
+Tomato Spider Mites
+Tomato Target Spot
+Tomato Yellow Leaf Curl Virus
+Tomato Mosaic Virus
+Tomato Healthy
+Corn Common Rust
+Corn Gray Leaf Spot
+Corn Healthy
+Corn Northern Leaf Blight
+Potato Early Blight
+Potato Healthy
+Potato Late Blight
+Rice Brown Spot
+Rice Healthy
+Rice Leaf Blast
+Rice Neck Blast
+Sugarcane Bacterial Blight
+Sugarcane Healthy
+Sugarcane Red Rot
+Wheat Brown Rust
+Wheat Healthy
+Wheat Yellow Rust
+Mango Anthracnose
+Mango Fruit Fly
+Guava Healthy
+Dataset Analysis Test
+Dataset Analysis Train
+Dataset Analysis Valid
+Aphids
+Aphids Edited
+Army Worm
+Army Worm Edited
+Bacterial Blight
+Bacterial Blight Edited
+Bacterial Blight
+Healthy
+Healthy Leaf Edited
+Powdery Mildew
+Powdery Mildew Edited
+Powdery Mildew
+Target Spot
+Target Spot Edited
+Healthy
+Mosaic
+RedRot
+Rust
+Yellow
+Mango Anthracnose
+Mango Bacterial Canker
+Mango Cutting Weevil
+Mango Die Back
+Mango Gall Midge
+Mango Healthy
+Mango Powdery Mildew
+Mango Sooty Mould
+Wheat Healthy
+Wheat Septoria
+Wheat Stripe Rust

@@ -5,8 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/karsha")
-DATABASE_URL = "postgresql://neondb_owner:npg_0RrGf3sdSBcH@ep-curly-brook-a1f1qydo-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+# Load Database URL from Environment
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    # Fallback for local development if .env is missing or incomplete
+    DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/karsha"
 
 # Create the engine with pool_pre_ping=True to fix "SSL connection closed" errors
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)

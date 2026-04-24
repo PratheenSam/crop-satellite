@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Optional
+from datetime import datetime
 
 
 class FarmRequest(BaseModel):
@@ -146,9 +147,33 @@ class FarmerUpdate(BaseModel):
 
 class FarmCreate(BaseModel):
     farmer_id: int
+    village_name: str
+    crop_category: str
     crop_type: str
+    duration: str
     sowing_date: str
     soil_type: str
     irrigation_type: str
     coordinates: List[List[float]]
     area_acres: float
+
+    @field_validator("coordinates")
+    @classmethod
+    def validate_points(cls, v: List[List[float]]) -> List[List[float]]:
+        if len(v) < 3:
+            raise ValueError("Farm polygon must contain at least 3 coordinate pairs.")
+        return v
+
+class DiagnosisResponse(BaseModel):
+    id: int
+    disease_name: str
+    confidence: float
+    symptoms: Optional[str] = None
+    remedy: Optional[str] = None
+    chemical_remedy: Optional[str] = None
+    organic_remedy: Optional[str] = None
+    detected_at: datetime
+    image_id: str
+
+    class Config:
+        from_attributes = True

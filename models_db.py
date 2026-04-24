@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON, UniqueConstraint, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from db import Base
@@ -21,7 +21,10 @@ class Farm(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     farmer_id = Column(Integer, ForeignKey("farmers.id"))
+    village_name = Column(String)
+    crop_category = Column(String)
     crop_type = Column(String)
+    duration = Column(String)
     sowing_date = Column(String)  # Storing as string for simplicity in this flow
     soil_type = Column(String)
     irrigation_type = Column(String)
@@ -48,3 +51,45 @@ class AnalysisRecord(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     farm = relationship("Farm", back_populates="analysis_history")
+
+class Disease(Base):
+    __tablename__ = "diseases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plant_name = Column(String, index=True)
+    disease_name = Column(String, index=True)
+    description = Column(String, nullable=True)
+    prevention = Column(String, nullable=True)
+    symptoms = Column(String, nullable=True)
+    remedy = Column(String, nullable=True)
+    medicines = Column(JSON, nullable=True)
+    local_names = Column(JSON, nullable=True)
+    chemical_remedy = Column(String, nullable=True)
+    organic_remedy = Column(String, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint('plant_name', 'disease_name', name='_plant_disease_uc'),
+    )
+
+class DiagnosticImage(Base):
+    __tablename__ = "diagnostic_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"))
+    image_data = Column(LargeBinary)  # Stores raw photo contents
+    filename = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class DiagnosisRecord(Base):
+    __tablename__ = "diagnosis_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.id"))
+    image_id = Column(Integer, ForeignKey("diagnostic_images.id")) # Refers to local Postgres ID
+    plant_name = Column(String, nullable=True) # User-selected or AI-detected plant
+    disease_name = Column(String)
+    confidence = Column(Float)
+    status = Column(String, nullable=True)     # 'high', 'moderate', 'inconclusive'
+    full_details = Column(JSON, nullable=True) # Full structured expert report
+    ai_model = Column(String)  # e.g., 'Hybrid Expert (Reliability Enabled)'
+    detected_at = Column(DateTime(timezone=True), server_default=func.now())
