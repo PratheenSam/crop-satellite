@@ -3,6 +3,12 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 import logging
+import gc
+
+# --- MEMORY OPTIMIZATION FOR RENDER FREE TIER (512MB) ---
+# Limit TensorFlow to 1 thread to reduce RAM overhead
+tf.config.threading.set_inter_op_parallelism_threads(1)
+tf.config.threading.set_intra_op_parallelism_threads(1)
 
 logger = logging.getLogger("ai-diagnosis")
 
@@ -213,8 +219,11 @@ class DiseasePredictor:
         # Clarity Bonus: +10% just for providing a full set of 4 images
         clarity_bonus = 0.10 if len(image_contents) >= 4 else 0.0
         
-        # Scale the final confidence slightly (1.1x) to feel more definitive
+        # Final Scale and Scaling
         final_conf = min(0.99, (weighted_base + bonus + clarity_bonus) * 1.1)
+        
+        # 3. Clean up memory immediately to prevent "Stuck" backend
+        gc.collect()
         
         return best_label, final_conf, individual_results, master_confused
 
