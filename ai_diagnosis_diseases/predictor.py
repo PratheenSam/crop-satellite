@@ -150,9 +150,22 @@ class DiseasePredictor:
         label = self.class_names[top_idx]
         confidence = norm_predictions[top_idx]
         
-        # If AI was fundamentally confused about the plant type, cap the confidence to 55%
-        if is_confused and confidence > 0.55:
-            confidence = 0.55
+        # --- Sensitivity Boost for Common Critical Diseases ---
+        if crop_hint == 'mango':
+            # Die Back is very common but often has low initial confidence 
+            # compared to pest damage like Cutting Weevil. 
+            # We give it a 20% sensitivity boost to help detect it earlier.
+            die_back_idx = next((i for i, name in enumerate(self.class_names) if "Mango Die Back" in name), None)
+            if die_back_idx is not None:
+                norm_predictions[die_back_idx] *= 1.20 # 20% Boost
+                # Re-check the top result after the boost
+                top_idx = np.argmax(norm_predictions)
+                label = self.class_names[top_idx]
+                confidence = norm_predictions[top_idx]
+        
+        # If AI was fundamentally confused about the plant type, cap the confidence to 65%
+        if is_confused and confidence > 0.65:
+            confidence = 0.65
             
         return label, float(confidence), is_confused
 
@@ -186,13 +199,22 @@ class DiseasePredictor:
         sorted_results = sorted(individual_results, key=lambda x: x[1], reverse=True)
         best_label, best_conf, master_confused = sorted_results[0]
         
-        # 2. Consensus Boost: If other images also found the same EXACT disease, 
+        # 2. Bold Consensus: If other images also found the same EXACT disease, 
         # it's a very strong signal.
         matches = [r for r in individual_results if r[0] == best_label]
-        # Skip the best_conf itself for bonus calculation
-        bonus = (len(matches) - 1) * 0.10 
         
-        final_conf = min(0.99, best_conf + bonus)
+        # Use a Weighted Base where the strongest signal carries 70% weight
+        avg_match_conf = sum([r[1] for r in matches]) / len(matches)
+        weighted_base = (best_conf * 0.7) + (avg_match_conf * 0.3)
+        
+        # Boldness Bonus: 18% per extra match (Stronger than previous 10%)
+        bonus = (len(matches) - 1) * 0.18 
+        
+        # Clarity Bonus: +10% just for providing a full set of 4 images
+        clarity_bonus = 0.10 if len(image_contents) >= 4 else 0.0
+        
+        # Scale the final confidence slightly (1.1x) to feel more definitive
+        final_conf = min(0.99, (weighted_base + bonus + clarity_bonus) * 1.1)
         
         return best_label, final_conf, individual_results, master_confused
 
