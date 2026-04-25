@@ -21,37 +21,15 @@ class DiseasePredictor:
         
         try:
             if os.path.exists(self.model_path):
-                logger.info(f"Reconstructing model and loading weights from {self.model_path}")
-                
-                # Create a fresh base model
-                base_full = tf.keras.applications.EfficientNetB0(
-                    include_top=False, 
-                    weights=None, 
-                    input_shape=(224, 224, 3)
-                )
-                
-                # Build the functional model explicitly to avoid input tensor duplication
-                x = base_full.output
-                x = tf.keras.layers.GlobalAveragePooling2D()(x)
-                x = tf.keras.layers.Dropout(0.3)(x)
-                outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
-                
-                self.model = tf.keras.Model(inputs=base_full.input, outputs=outputs)
-                
-                # Load weights only. If it's a full model, load_weights still works.
-                try:
-                    self.model.load_weights(self.model_path)
-                    logger.info("✅ Weights loaded successfully into functional architecture.")
-                except Exception as e:
-                    logger.warning(f"Weight load failed, trying full load_model: {e}")
-                    self.model = tf.keras.models.load_model(self.model_path, compile=False)
-                    logger.info("✅ Model loaded via fallback load_model.")
-                    
+                logger.info(f"Loading model from {self.model_path}")
+                # Use standard load_model - most reliable if architecture is saved in .h5
+                self.model = tf.keras.models.load_model(self.model_path, compile=False)
+                logger.info("✅ AI Model initialized successfully.")
             else:
-                logger.error(f"Custom model NOT FOUND at {self.model_path}")
+                logger.error(f"Model file NOT FOUND at {self.model_path}")
                 self.model = None
         except Exception as e:
-            logger.error(f"Critical failure building or loading model: {e}")
+            logger.error(f"Critical failure loading AI Model: {e}")
             self.model = None
 
     def _load_labels(self):
@@ -82,7 +60,7 @@ class DiseasePredictor:
         we ONLY allow results from that specific crop, suppressing everything else.
         """
         if self.model is None:
-            return "Error: Model Not Loaded", 0.0
+            return "Error: Model Not Loaded", 0.0, False
             
         processed_img = self.preprocess_image(image_bytes)
         raw_predictions = self.model.predict(processed_img, verbose=0)[0]
