@@ -21,15 +21,35 @@ class DiseasePredictor:
         
         try:
             if os.path.exists(self.model_path):
-                logger.info(f"Loading model from {self.model_path}")
-                # Use standard load_model - most reliable if architecture is saved in .h5
-                self.model = tf.keras.models.load_model(self.model_path, compile=False)
-                logger.info("✅ AI Model initialized successfully.")
+                logger.info(f"Deeply reconstructing model from architecture using {self.model_path}")
+                
+                # 1. Rebuild the exact architecture manually
+                # This bypasses the Keras version 'input tensor' bug
+                base_full = tf.keras.applications.EfficientNetB0(
+                    include_top=False, 
+                    weights=None, 
+                    input_shape=(224, 224, 3)
+                )
+                x = base_full.output
+                x = tf.keras.layers.GlobalAveragePooling2D()(x)
+                x = tf.keras.layers.Dropout(0.3)(x)
+                outputs = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+                self.model = tf.keras.Model(inputs=base_full.input, outputs=outputs)
+                
+                # 2. Inject weights only
+                # if it's a full h5, load_weights will automatically extract the weights
+                try:
+                    self.model.load_weights(self.model_path)
+                    logger.info("✅ AI Model successfully reconstructed and weights injected.")
+                except:
+                    logger.warning("Standard weight load failed, trying 'by_name=True' fallback...")
+                    self.model.load_weights(self.model_path, by_name=True)
+                    logger.info("✅ AI Model loaded via name-matched weights.")
             else:
                 logger.error(f"Model file NOT FOUND at {self.model_path}")
                 self.model = None
         except Exception as e:
-            logger.error(f"Critical failure loading AI Model: {e}")
+            logger.error(f"Critical failure during Deep Reconstruction: {e}")
             self.model = None
 
     def _load_labels(self):
